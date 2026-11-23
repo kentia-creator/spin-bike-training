@@ -1,0 +1,2887 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>VO2max 4×4 / Zone 2 トレーニングサポート</title>
+
+  <!-- iOS Safari PWA / ホーム画面追加用メタタグ -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="VO2max Trainer" />
+  <meta name="theme-color" content="#090d16" />
+
+  <style>
+    /* =========================================================
+       デザイントークン & テーマ変数（OLED向け高コントラストダーク）
+       ========================================================= */
+    :root {
+      --bg-base: #090d16;
+      --bg-panel: #111827;
+      --bg-card: #161f32;
+      --bg-elevated: #1e293b;
+      --border-subtle: rgba(255, 255, 255, 0.09);
+      --border-strong: rgba(255, 255, 255, 0.18);
+
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      /* 強度帯カラー */
+      --c-warmup: #3b82f6;
+      --c-cooldown: #3b82f6;
+      --c-priming: #f59e0b;
+      --c-recovery: #10b981;
+      --c-zone2: #10b981;
+      --c-hiit: #ef4444;
+
+      /* 動的アクティブアクセント（JSで現在ステップに応じて上書き） */
+      --accent: #3b82f6;
+      --accent-glow: rgba(59, 130, 246, 0.22);
+      --accent-soft: rgba(59, 130, 246, 0.12);
+
+      --radius-sm: 10px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --safe-left: env(safe-area-inset-left, 0px);
+      --safe-right: env(safe-area-inset-right, 0px);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      height: 100%;
+      background-color: var(--bg-base);
+      color: var(--text-primary);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+      -webkit-font-smoothing: antialiased;
+      touch-action: manipulation;
+      overscroll-behavior: none;
+    }
+
+    button, input, select {
+      font-family: inherit;
+      touch-action: manipulation;
+    }
+
+    /* =========================================================
+       アプリ全体シェル & ヘッダー
+       ========================================================= */
+    .app-shell {
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      padding-top: var(--safe-top);
+      padding-bottom: var(--safe-bottom);
+      padding-left: var(--safe-left);
+      padding-right: var(--safe-right);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 14px 8px;
+      background: rgba(9, 13, 22, 0.92);
+      border-bottom: 1px solid var(--border-subtle);
+      flex-shrink: 0;
+    }
+
+    .mode-tabs {
+      display: flex;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 3px;
+      gap: 3px;
+      flex: 1;
+      max-width: 440px;
+    }
+
+    .mode-tab {
+      flex: 1;
+      border: none;
+      background: transparent;
+      color: var(--text-secondary);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 8px 6px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: all 0.16s ease;
+      white-space: nowrap;
+      line-height: 1.15;
+    }
+
+    .mode-tab small {
+      display: block;
+      font-size: 10px;
+      font-weight: 600;
+      opacity: 0.78;
+      margin-top: 1px;
+    }
+
+    .mode-tab.active {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .wake-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    .wake-badge .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--text-muted);
+    }
+
+    .wake-badge.active {
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .wake-badge.active .dot {
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 11px;
+      border: 1px solid var(--border-subtle);
+      background: var(--bg-panel);
+      color: var(--text-primary);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background 0.15s ease, transform 0.1s ease;
+    }
+
+    .icon-btn:active {
+      transform: scale(0.94);
+    }
+
+    .icon-btn.muted {
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.4);
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    /* =========================================================
+       全体タイムラインプログレスバー
+       ========================================================= */
+    .timeline-wrap {
+      padding: 8px 14px 6px;
+      background: var(--bg-base);
+      flex-shrink: 0;
+    }
+
+    .timeline-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      margin-bottom: 5px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .timeline-bar {
+      display: flex;
+      gap: 2px;
+      height: 10px;
+      width: 100%;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--bg-panel);
+    }
+
+    .tl-seg {
+      position: relative;
+      height: 100%;
+      background: rgba(255, 255, 255, 0.12);
+      overflow: hidden;
+      border-radius: 2px;
+      cursor: pointer;
+    }
+
+    .tl-seg-fill {
+      height: 100%;
+      width: 0%;
+      transition: width 0.15s linear;
+    }
+
+    .tl-seg.current {
+      box-shadow: inset 0 0 0 1.5px #ffffff;
+    }
+
+    /* =========================================================
+       バナー通知（次ステップ予告 / Zone2定負荷テスト通知）
+       ========================================================= */
+    .banner-stack {
+      padding: 0 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .alert-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: var(--radius-md);
+      font-weight: 800;
+      font-size: 14px;
+      animation: pulseBanner 1s ease-in-out infinite alternate;
+    }
+
+    .alert-banner.visible {
+      display: flex;
+    }
+
+    .alert-banner.next-up {
+      background: linear-gradient(90deg, rgba(245, 158, 11, 0.25), rgba(239, 68, 68, 0.22));
+      border: 1.5px solid #f59e0b;
+      color: #fef3c7;
+    }
+
+    .alert-banner.z2-check {
+      background: linear-gradient(90deg, rgba(16, 185, 129, 0.3), rgba(59, 130, 246, 0.25));
+      border: 1.5px solid #34d399;
+      color: #ecfdf5;
+    }
+
+    .alert-banner button {
+      background: rgba(255, 255, 255, 0.18);
+      border: none;
+      color: #fff;
+      padding: 5px 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulseBanner {
+      from { box-shadow: 0 0 0 rgba(245, 158, 11, 0); }
+      to { box-shadow: 0 0 18px rgba(245, 158, 11, 0.35); }
+    }
+
+    /* =========================================================
+       メイン2ペインレイアウト（縦向き：1列、横向き：2列サイコン風）
+       ========================================================= */
+    .workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      padding: 8px 14px 18px;
+      max-width: 1280px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .left-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .right-pane {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* =========================================================
+       現在ステップ 特大サイコンカード
+       ========================================================= */
+    .stage-card {
+      position: relative;
+      background: radial-gradient(120% 90% at 50% 0%, var(--accent-soft) 0%, var(--bg-panel) 72%);
+      border: 1.5px solid var(--accent);
+      box-shadow: 0 0 28px var(--accent-glow);
+      border-radius: var(--radius-lg);
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .stage-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .step-badge-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .zone-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      background: var(--accent);
+      color: #ffffff;
+      flex-shrink: 0;
+    }
+
+    .step-title {
+      font-size: clamp(18px, 4.6vw, 24px);
+      font-weight: 900;
+      color: var(--text-primary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .step-counter {
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--text-secondary);
+      background: rgba(255, 255, 255, 0.07);
+      padding: 4px 10px;
+      border-radius: 999px;
+      flex-shrink: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* 特大タイマー＆L/Rビート表示 */
+    .timer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .beat-lamp {
+      width: 50px;
+      height: 50px;
+      border-radius: 14px;
+      border: 1.5px solid var(--border-strong);
+      background: rgba(255, 255, 255, 0.04);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: 900;
+      color: var(--text-muted);
+      transition: transform 0.06s ease, background 0.06s ease, box-shadow 0.06s ease;
+      flex-shrink: 0;
+      user-select: none;
+    }
+
+    .beat-lamp small {
+      font-size: 9px;
+      font-weight: 700;
+      opacity: 0.7;
+    }
+
+    .beat-lamp.lit {
+      background: var(--accent);
+      border-color: #ffffff;
+      color: #ffffff;
+      transform: scale(1.09);
+      box-shadow: 0 0 20px var(--accent);
+    }
+
+    .beat-lamp.lit-soft {
+      background: rgba(255, 255, 255, 0.25);
+      border-color: var(--accent);
+      color: #ffffff;
+      transform: scale(1.05);
+      box-shadow: 0 0 14px var(--accent-glow);
+    }
+
+    .timer-center {
+      flex: 1;
+      text-align: center;
+      position: relative;
+    }
+
+    .timer-digits {
+      font-size: clamp(56px, 16vw, 84px);
+      font-weight: 900;
+      line-height: 0.98;
+      letter-spacing: -0.03em;
+      font-variant-numeric: tabular-nums;
+      color: #ffffff;
+      text-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+    }
+
+    .timer-sub {
+      margin-top: 5px;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .extra-pill {
+      display: none;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(245, 158, 11, 0.22);
+      border: 1px solid rgba(245, 158, 11, 0.5);
+      color: #fcd34d;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .extra-pill.show {
+      display: inline-flex;
+    }
+
+    /* 3大メトリクス（負荷 / 目標RPM / 目標心拍） */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .metric-card {
+      background: rgba(9, 13, 22, 0.68);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 10px 8px;
+      text-align: center;
+    }
+
+    .metric-card.primary-metric {
+      border-color: rgba(255, 255, 255, 0.16);
+      background: rgba(9, 13, 22, 0.82);
+    }
+
+    .metric-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      margin-bottom: 2px;
+    }
+
+    .metric-val {
+      font-size: clamp(24px, 6.5vw, 34px);
+      font-weight: 900;
+      line-height: 1.1;
+      color: var(--text-primary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-val.hr-val {
+      font-size: clamp(18px, 4.8vw, 26px);
+      line-height: 1.3;
+    }
+
+    .metric-unit {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* ステップ内プログレスバー */
+    .step-progress-track {
+      height: 6px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .step-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 999px;
+      transition: width 0.1s linear;
+    }
+
+    /* =========================================================
+       操作コントロール＆延長ボタン（汗でも押しやすい大型ボタン）
+       ========================================================= */
+    .controls-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .main-controls {
+      display: grid;
+      grid-template-columns: 1fr 2.2fr 1fr;
+      gap: 8px;
+    }
+
+    .btn {
+      border: none;
+      border-radius: var(--radius-md);
+      font-weight: 800;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: transform 0.08s ease, filter 0.15s ease, background 0.15s ease;
+      user-select: none;
+    }
+
+    .btn:active {
+      transform: scale(0.96);
+    }
+
+    .btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-primary {
+      height: 58px;
+      font-size: 18px;
+      background: #10b981;
+      color: #042f2e;
+      box-shadow: 0 4px 16px rgba(16, 185, 129, 0.32);
+    }
+
+    .btn-primary.running {
+      background: #f59e0b;
+      color: #271502;
+      box-shadow: 0 4px 16px rgba(245, 158, 11, 0.32);
+    }
+
+    .btn-step {
+      height: 58px;
+      font-size: 13px;
+      background: var(--bg-card);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .btn-step span {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    /* 延長ボタン行（常時表示） */
+    .extend-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 7px;
+    }
+
+    .btn-extend {
+      height: 46px;
+      font-size: 14px;
+      background: var(--bg-panel);
+      color: #e2e8f0;
+      border: 1px solid var(--border-strong);
+      border-radius: 12px;
+    }
+
+    .btn-extend:hover {
+      background: var(--bg-elevated);
+    }
+
+    .btn-extend.flash {
+      background: rgba(245, 158, 11, 0.25);
+      border-color: #f59e0b;
+      color: #fef3c7;
+    }
+
+    /* サブコントロール行（ミュート / 完全終了） */
+    .sub-controls {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 8px;
+    }
+
+    .btn-mute {
+      height: 44px;
+      font-size: 13px;
+      background: var(--bg-panel);
+      color: var(--text-primary);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+    }
+
+    .btn-mute.is-muted {
+      background: rgba(239, 68, 68, 0.14);
+      border-color: rgba(239, 68, 68, 0.45);
+      color: #fca5a5;
+    }
+
+    .btn-danger {
+      height: 44px;
+      font-size: 13px;
+      background: rgba(239, 68, 68, 0.12);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      border-radius: 12px;
+    }
+
+    /* =========================================================
+       ステップ全体一覧（右ペイン / 下部リスト）
+       ========================================================= */
+    .list-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2px 4px;
+    }
+
+    .list-title {
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .list-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .step-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .step-item {
+      display: grid;
+      grid-template-columns: 26px 1fr auto;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 10px 10px 12px;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-subtle);
+      border-left: 4px solid var(--item-color, #3b82f6);
+      border-radius: 12px;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .step-item.done {
+      opacity: 0.45;
+    }
+
+    .step-item.current {
+      background: var(--bg-card);
+      border-color: var(--item-color, #3b82f6);
+      box-shadow: 0 0 0 1px var(--item-color, #3b82f6);
+    }
+
+    .step-idx {
+      width: 24px;
+      height: 24px;
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.07);
+      color: var(--text-secondary);
+      font-size: 11px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .step-item.current .step-idx {
+      background: var(--item-color, #3b82f6);
+      color: #ffffff;
+    }
+
+    .step-info {
+      min-width: 0;
+      cursor: pointer;
+    }
+
+    .step-name-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--text-primary);
+      margin-bottom: 3px;
+    }
+
+    .step-specs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .spec-chip {
+      background: rgba(255, 255, 255, 0.06);
+      padding: 2px 7px;
+      border-radius: 6px;
+    }
+
+    .spec-chip strong {
+      color: var(--text-primary);
+    }
+
+    .btn-edit-step {
+      padding: 8px 11px;
+      border-radius: 9px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* =========================================================
+       横向き（Landscape）＆タブレット/PC向け 2ペインサイコンレイアウト
+       ========================================================= */
+    @media (min-width: 740px), (orientation: landscape) and (min-width: 640px) {
+      .app-shell {
+        height: 100dvh;
+        overflow: hidden;
+      }
+
+      .workspace {
+        flex-direction: row;
+        align-items: stretch;
+        gap: 14px;
+        overflow: hidden;
+        padding: 8px 14px 10px;
+      }
+
+      .left-pane {
+        flex: 1.15;
+        justify-content: space-between;
+        overflow-y: auto;
+        min-height: 0;
+      }
+
+      .right-pane {
+        flex: 0.95;
+        min-height: 0;
+        overflow: hidden;
+        background: rgba(17, 24, 39, 0.55);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 10px;
+      }
+
+      .step-list {
+        flex: 1;
+        overflow-y: auto;
+        padding-right: 4px;
+        -webkit-overflow-scrolling: touch;
+      }
+    }
+
+    /* iPhone横向きなど高さが低い画面専用のコンパクト調整 */
+    @media (orientation: landscape) and (max-height: 500px) {
+      .topbar {
+        padding: 5px 12px;
+      }
+      .mode-tab {
+        padding: 5px 6px;
+        font-size: 11px;
+      }
+      .mode-tab small {
+        display: inline;
+        margin-left: 3px;
+      }
+      .timeline-wrap {
+        padding: 4px 12px 2px;
+      }
+      .timeline-meta {
+        margin-bottom: 3px;
+        font-size: 10px;
+      }
+      .timeline-bar {
+        height: 7px;
+      }
+      .workspace {
+        padding: 6px 12px 8px;
+        gap: 10px;
+      }
+      .stage-card {
+        padding: 9px 12px;
+        gap: 6px;
+        border-radius: 14px;
+      }
+      .step-title {
+        font-size: 16px;
+      }
+      .timer-digits {
+        font-size: clamp(40px, 11vh, 56px);
+      }
+      .beat-lamp {
+        width: 40px;
+        height: 40px;
+        font-size: 14px;
+      }
+      .metric-card {
+        padding: 5px 6px;
+      }
+      .metric-label {
+        font-size: 10px;
+      }
+      .metric-val {
+        font-size: 22px;
+      }
+      .metric-val.hr-val {
+        font-size: 16px;
+      }
+      .metric-unit {
+        display: none;
+      }
+      .controls-panel {
+        gap: 6px;
+      }
+      .btn-primary, .btn-step {
+        height: 44px;
+      }
+      .btn-primary {
+        font-size: 16px;
+      }
+      .btn-extend {
+        height: 36px;
+        font-size: 13px;
+      }
+      .btn-mute, .btn-danger {
+        height: 36px;
+        font-size: 12px;
+      }
+      .alert-banner {
+        padding: 6px 12px;
+        font-size: 12px;
+      }
+    }
+
+    /* =========================================================
+       モーダル（設定 / ステップ編集 / 確認 / 完了）
+       ========================================================= */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.78);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 500;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-card {
+      width: 100%;
+      max-width: 460px;
+      max-height: 88dvh;
+      overflow-y: auto;
+      background: var(--bg-panel);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-lg);
+      padding: 18px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 10px;
+    }
+
+    .modal-head h2 {
+      font-size: 17px;
+      font-weight: 800;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .text-input, .select-input {
+      width: 100%;
+      background: var(--bg-base);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      color: var(--text-primary);
+      padding: 10px 12px;
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .stepper-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .stepper-btn {
+      min-width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      border: 1px solid var(--border-strong);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      font-size: 15px;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .stepper-btn:active {
+      transform: scale(0.95);
+    }
+
+    .stepper-input {
+      flex: 1;
+      min-width: 0;
+      height: 44px;
+      text-align: center;
+      background: var(--bg-base);
+      border: 1px solid var(--border-strong);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-size: 18px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .time-edit-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+    }
+
+    .toggle-text strong {
+      display: block;
+      font-size: 13.5px;
+    }
+
+    .toggle-text span {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .switch {
+      position: relative;
+      width: 48px;
+      height: 28px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: #334155;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .slider::before {
+      content: "";
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      left: 3px;
+      top: 3px;
+      border-radius: 50%;
+      background: #ffffff;
+      transition: transform 0.2s;
+    }
+
+    .switch input:checked + .slider {
+      background: #10b981;
+    }
+
+    .switch input:checked + .slider::before {
+      transform: translateX(20px);
+    }
+
+    .range-input {
+      width: 100%;
+      accent-color: #10b981;
+      height: 28px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .modal-actions .btn {
+      flex: 1;
+      height: 46px;
+      font-size: 14px;
+    }
+
+    .btn-ghost {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      border: 1px solid var(--border-strong);
+    }
+
+    .btn-save {
+      background: #3b82f6;
+      color: #ffffff;
+    }
+
+    .btn-confirm-danger {
+      background: #ef4444;
+      color: #ffffff;
+    }
+
+    /* トースト通知 */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(22px + var(--safe-bottom));
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(30, 41, 59, 0.96);
+      border: 1px solid var(--border-strong);
+      color: #ffffff;
+      padding: 10px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 900;
+      white-space: nowrap;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* 完了サマリー */
+    .finish-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .finish-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .finish-box small {
+      display: block;
+      font-size: 11px;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .finish-box strong {
+      font-size: 22px;
+      font-weight: 900;
+      color: #34d399;
+      font-variant-numeric: tabular-nums;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <!-- ヘッダー：モード切替・Wake Lock・サウンド設定 -->
+    <header class="topbar">
+      <div class="mode-tabs" role="tablist" aria-label="トレーニングモード選択">
+        <button class="mode-tab active" data-mode="hiit4x4" role="tab">
+          4×4<small>43分</small>
+        </button>
+        <button class="mode-tab" data-mode="zone2_45" role="tab">
+          Zone 2<small>45分</small>
+        </button>
+        <button class="mode-tab" data-mode="zone2_60" role="tab">
+          Zone 2<small>60分</small>
+        </button>
+      </div>
+
+      <div class="topbar-actions">
+        <div id="wakeBadge" class="wake-badge" title="画面スリープ防止状態">
+          <span class="dot"></span>
+          <span id="wakeBadgeText">常灯 待機</span>
+        </div>
+        <button id="btnOpenSettings" class="icon-btn" aria-label="設定を開く" title="設定">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.6.85 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 全体タイムラインプログレスバー -->
+    <section class="timeline-wrap" aria-label="全体進捗">
+      <div class="timeline-meta">
+        <span>全体経過 <strong id="totalElapsedLabel">00:00</strong></span>
+        <span id="metroBpmInfo">メトロノーム 156 BPM</span>
+        <span>残り <strong id="totalRemainLabel">43:00</strong></span>
+      </div>
+      <div id="timelineBar" class="timeline-bar"></div>
+    </section>
+
+    <!-- 緊急・事前通知バナー -->
+    <div class="banner-stack">
+      <div id="nextUpBanner" class="alert-banner next-up" role="status">
+        <span id="nextUpText">次 → 1本目｜負荷 5｜85 RPM</span>
+        <span id="nextUpCountdown" style="font-variant-numeric: tabular-nums;">10s</span>
+      </div>
+      <div id="z2CheckBanner" class="alert-banner z2-check" role="alert">
+        <span id="z2CheckText">20分経過：心拍数を記録！</span>
+        <button id="btnDismissZ2Banner" type="button">OK</button>
+      </div>
+    </div>
+
+    <!-- メインワークスペース（縦：上下 / 横：左右2ペイン） -->
+    <main class="workspace">
+      <!-- 左ペイン（メインタイマー＆操作） -->
+      <section class="left-pane">
+        <div id="stageCard" class="stage-card">
+          <div class="stage-header">
+            <div class="step-badge-group">
+              <span id="zonePill" class="zone-pill">WU</span>
+              <h1 id="currentStepTitle" class="step-title">WU ①</h1>
+            </div>
+            <span id="stepCounter" class="step-counter">1 / 13</span>
+          </div>
+
+          <div class="timer-row">
+            <div id="lampL" class="beat-lamp">
+              <span>L</span>
+              <small>左</small>
+            </div>
+            <div class="timer-center">
+              <div id="timerDigits" class="timer-digits">03:00</div>
+              <div class="timer-sub">
+                <span>経過 <span id="stepElapsedText">00:00</span> / <span id="stepTotalText">03:00</span></span>
+                <span id="extraTimePill" class="extra-pill">+0s</span>
+              </div>
+            </div>
+            <div id="lampR" class="beat-lamp">
+              <span>R</span>
+              <small>右</small>
+            </div>
+          </div>
+
+          <div class="metrics-grid">
+            <div class="metric-card primary-metric">
+              <div class="metric-label">負荷レベル</div>
+              <div id="metricLoad" class="metric-val">1</div>
+              <div class="metric-unit">LEVEL</div>
+            </div>
+            <div class="metric-card primary-metric">
+              <div class="metric-label">目標 RPM</div>
+              <div id="metricRpm" class="metric-val">78</div>
+              <div id="metricBpmSub" class="metric-unit">156 BPM</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-label">目標心拍</div>
+              <div id="metricHr" class="metric-val hr-val">〜110</div>
+              <div class="metric-unit">bpm</div>
+            </div>
+          </div>
+
+          <div class="step-progress-track">
+            <div id="stepProgressFill" class="step-progress-fill"></div>
+          </div>
+        </div>
+
+        <!-- 操作ボタン群 -->
+        <div class="controls-panel">
+          <div class="main-controls">
+            <button id="btnPrev" class="btn btn-step" type="button" aria-label="前のステップへ戻る">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="19 20 9 12 19 4 19 20"></polygon><line x1="5" y1="19" x2="5" y2="5"></line></svg>
+              <span>前へ</span>
+            </button>
+
+            <button id="btnStartPause" class="btn btn-primary" type="button">
+              <svg id="iconPlayPause" width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20 6 4"></polygon></svg>
+              <span id="textPlayPause">スタート</span>
+            </button>
+
+            <button id="btnNext" class="btn btn-step" type="button" aria-label="次のステップへスキップ">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4"></polygon><line x1="19" y1="5" x2="19" y2="19"></line></svg>
+              <span>スキップ</span>
+            </button>
+          </div>
+
+          <!-- 延長ボタン常時表示 -->
+          <div class="extend-row" aria-label="現在のステップを延長">
+            <button class="btn btn-extend" data-extend="10" type="button">+10秒</button>
+            <button class="btn btn-extend" data-extend="30" type="button">+30秒</button>
+            <button class="btn btn-extend" data-extend="60" type="button">+1分</button>
+            <button class="btn btn-extend" data-extend="120" type="button">+2分</button>
+          </div>
+
+          <!-- ミュート & 完全終了 -->
+          <div class="sub-controls">
+            <button id="btnMuteToggle" class="btn btn-mute" type="button">
+              <svg id="iconMute" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+              </svg>
+              <span id="textMute">メトロノーム ON</span>
+            </button>
+
+            <button id="btnStopFull" class="btn btn-danger" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="3"></rect></svg>
+              <span>完全終了</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 右ペイン（ステップ全体一覧） -->
+      <section class="right-pane" aria-label="ステップ全体一覧">
+        <div class="list-header">
+          <div class="list-title">
+            <span id="planListTitle">4×4 ステップ一覧</span>
+            <span id="planTotalBadge" style="color: var(--text-primary);"></span>
+          </div>
+          <span class="list-hint">行タップで移動 / 編集で保存</span>
+        </div>
+        <div id="stepList" class="step-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ==================== ステップ編集モーダル ==================== -->
+  <div id="editModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="editModalTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="editModalTitle">ステップを編集</h2>
+        <button id="btnCloseEdit" class="icon-btn" type="button" aria-label="閉じる">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="editName">ステップ名</label>
+        <input id="editName" class="text-input" type="text" maxlength="30" />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="editType">強度帯（カラー）</label>
+        <select id="editType" class="select-input">
+          <option value="warmup">ウォームアップ（青）</option>
+          <option value="priming">プライミング（黄）</option>
+          <option value="recovery">リカバリー / 緩め（緑）</option>
+          <option value="zone2">Zone 2 本体（緑）</option>
+          <option value="hiit">4×4 高強度（赤）</option>
+          <option value="cooldown">クールダウン（青）</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">時間（分・秒）</label>
+        <div class="time-edit-grid">
+          <div>
+            <div class="form-label" style="margin-bottom:4px;"><span>分</span></div>
+            <div class="stepper-row">
+              <button class="stepper-btn" type="button" data-target="editMin" data-delta="-1">−</button>
+              <input id="editMin" class="stepper-input" type="number" min="0" max="120" inputmode="numeric" />
+              <button class="stepper-btn" type="button" data-target="editMin" data-delta="1">+</button>
+            </div>
+          </div>
+          <div>
+            <div class="form-label" style="margin-bottom:4px;"><span>秒</span></div>
+            <div class="stepper-row">
+              <button class="stepper-btn" type="button" data-target="editSec" data-delta="-10">−10</button>
+              <input id="editSec" class="stepper-input" type="number" min="0" max="59" inputmode="numeric" />
+              <button class="stepper-btn" type="button" data-target="editSec" data-delta="10">+10</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">負荷レベル</label>
+        <div class="stepper-row">
+          <button class="stepper-btn" type="button" data-target="editLoad" data-delta="-1">−</button>
+          <input id="editLoad" class="stepper-input" type="number" min="1" max="32" inputmode="numeric" />
+          <button class="stepper-btn" type="button" data-target="editLoad" data-delta="1">+</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">目標 RPM（回転数）</label>
+        <div class="stepper-row">
+          <button class="stepper-btn" type="button" data-target="editRpm" data-delta="-5">−5</button>
+          <button class="stepper-btn" type="button" data-target="editRpm" data-delta="-1">−1</button>
+          <input id="editRpm" class="stepper-input" type="number" min="30" max="150" inputmode="numeric" />
+          <button class="stepper-btn" type="button" data-target="editRpm" data-delta="1">+1</button>
+          <button class="stepper-btn" type="button" data-target="editRpm" data-delta="5">+5</button>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="editHr">目標心拍（表示テキスト）</label>
+        <input id="editHr" class="text-input" type="text" placeholder="例：176–186" maxlength="24" />
+      </div>
+
+      <div class="modal-actions">
+        <button id="btnCancelEdit" class="btn btn-ghost" type="button">キャンセル</button>
+        <button id="btnSaveEdit" class="btn btn-save" type="button">保存する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 設定モーダル ==================== -->
+  <div id="settingsModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h2 id="settingsModalTitle">サウンド・アプリ設定</h2>
+        <button id="btnCloseSettings" class="icon-btn" type="button" aria-label="閉じる">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="settingMetroMode">メトロノーム方式</label>
+        <select id="settingMetroMode" class="select-input">
+          <option value="double_accent">2倍（強・弱：右/左の片足ごと）</option>
+          <option value="double_even">2倍（均等クリック）</option>
+          <option value="single">等倍（1回転につき1音）</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="settingVolume">
+          <span>音量</span>
+          <span id="settingVolumeVal">80%</span>
+        </label>
+        <input id="settingVolume" class="range-input" type="range" min="10" max="100" step="5" value="80" />
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <strong>ステップ切替ガイド音</strong>
+          <span>残り3・2・1秒カウントダウン＋切替チャイム</span>
+        </div>
+        <label class="switch">
+          <input id="settingGuideSound" type="checkbox" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="toggle-row">
+        <div class="toggle-text">
+          <strong>Zone 2 定負荷テスト通知</strong>
+          <span>開始20分・35分時点でチャイム＆心拍記録バナー表示</span>
+        </div>
+        <label class="switch">
+          <input id="settingZ2Alert" type="checkbox" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <button id="btnSoundTest" class="btn btn-ghost" style="height:44px; font-size:13px;" type="button">
+        🔊 サウンドテスト（クリック音＆チャイム確認）
+      </button>
+
+      <div style="border-top: 1px solid var(--border-subtle); padding-top: 12px; display:flex; flex-direction:column; gap:8px;">
+        <button id="btnResetCurrentPlan" class="btn btn-danger" style="height:44px;" type="button">
+          現在のモードを初期プランに戻す
+        </button>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btnDoneSettings" class="btn btn-save" type="button">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 確認モーダル（alert/confirm代替） ==================== -->
+  <div id="confirmModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+    <div class="modal-card" style="max-width: 380px;">
+      <div class="modal-head">
+        <h2 id="confirmTitle">確認</h2>
+      </div>
+      <p id="confirmMessage" style="font-size:14px; color:var(--text-secondary); line-height:1.6;"></p>
+      <div class="modal-actions">
+        <button id="btnConfirmCancel" class="btn btn-ghost" type="button">キャンセル</button>
+        <button id="btnConfirmOk" class="btn btn-confirm-danger" type="button">実行する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== 完了モーダル ==================== -->
+  <div id="finishModal" class="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="finishTitle">
+    <div class="modal-card" style="max-width: 400px; text-align:center;">
+      <div style="font-size:42px; line-height:1;">🏁</div>
+      <h2 id="finishTitle" style="font-size:22px; font-weight:900;">トレーニング完了！</h2>
+      <p id="finishSub" style="font-size:13px; color:var(--text-secondary);">お疲れさまでした。セッションを記録用紙に記入し、ぬるめのシャワーでクールダウンしてください。</p>
+      <div class="finish-stats">
+        <div class="finish-box">
+          <small>実施モード</small>
+          <strong id="finishModeName" style="font-size:16px; color:#f8fafc;">4×4</strong>
+        </div>
+        <div class="finish-box">
+          <small>総経過時間</small>
+          <strong id="finishTotalTime">43:00</strong>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="btnFinishClose" class="btn btn-save" type="button">初期画面に戻る</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    /**
+     * VO2max 4×4 / Zone 2 トレーニングサポートアプリ
+     * - タイムスタンプ差分方式の高精度タイマー
+     * - Web Audio API 25msルックアヘッド / 100ms先読みメトロノーム
+     * - localStorage による編集内容・設定の永続化
+     * - Screen Wake Lock API によるスリープ防止
+     */
+    (() => {
+      'use strict';
+
+      /* =========================================================
+         定数 & 初期プリセットデータ
+         ========================================================= */
+      const STORAGE_KEYS = {
+        PLANS: 'vo2max_trainer_plans_v1',
+        SETTINGS: 'vo2max_trainer_settings_v1',
+        MODE: 'vo2max_trainer_last_mode_v1'
+      };
+
+      const ZONE_META = {
+        warmup:   { label: 'WU',       color: '#3b82f6', glow: 'rgba(59, 130, 246, 0.25)',  soft: 'rgba(59, 130, 246, 0.14)' },
+        priming:  { label: 'プライミング', color: '#f59e0b', glow: 'rgba(245, 158, 11, 0.28)',  soft: 'rgba(245, 158, 11, 0.15)' },
+        recovery: { label: '回復',      color: '#10b981', glow: 'rgba(16, 185, 129, 0.25)',  soft: 'rgba(16, 185, 129, 0.14)' },
+        zone2:    { label: 'Zone 2',   color: '#10b981', glow: 'rgba(16, 185, 129, 0.28)',  soft: 'rgba(16, 185, 129, 0.15)' },
+        hiit:     { label: '高強度',    color: '#ef4444', glow: 'rgba(239, 68, 68, 0.34)',   soft: 'rgba(239, 68, 68, 0.18)' },
+        cooldown: { label: 'CD',       color: '#3b82f6', glow: 'rgba(59, 130, 246, 0.25)',  soft: 'rgba(59, 130, 246, 0.14)' }
+      };
+
+      const MODE_LABELS = {
+        hiit4x4: '4×4（43分）',
+        zone2_45: 'Zone 2（45分・通常）',
+        zone2_60: 'Zone 2（60分・土曜）'
+      };
+
+      const DEFAULT_PLANS = {
+        hiit4x4: [
+          { name: 'WU ①',           durationSec: 180, load: 1, rpm: 78, hr: '〜110',   type: 'warmup' },
+          { name: 'WU ②',           durationSec: 180, load: 2, rpm: 82, hr: '〜125',   type: 'warmup' },
+          { name: 'WU ③',           durationSec: 120, load: 3, rpm: 85, hr: '〜137',   type: 'warmup' },
+          { name: 'プライミング',     durationSec: 120, load: 4, rpm: 88, hr: '145–155', type: 'priming' },
+          { name: '緩め',            durationSec: 180, load: 1, rpm: 65, hr: '135–145', type: 'recovery' },
+          { name: '1本目（高強度）',   durationSec: 240, load: 5, rpm: 85, hr: '176–186', type: 'hiit' },
+          { name: '回復 ①',          durationSec: 180, load: 1, rpm: 65, hr: '137–151', type: 'recovery' },
+          { name: '2本目（高強度）',   durationSec: 240, load: 5, rpm: 85, hr: '176–186', type: 'hiit' },
+          { name: '回復 ②',          durationSec: 180, load: 1, rpm: 65, hr: '137–151', type: 'recovery' },
+          { name: '3本目（高強度）',   durationSec: 240, load: 5, rpm: 85, hr: '176–186', type: 'hiit' },
+          { name: '回復 ③',          durationSec: 180, load: 1, rpm: 65, hr: '137–151', type: 'recovery' },
+          { name: '4本目（高強度）',   durationSec: 240, load: 5, rpm: 85, hr: '176–186', type: 'hiit' },
+          { name: 'クールダウン',      durationSec: 300, load: 1, rpm: 70, hr: '〜129',   type: 'cooldown' }
+        ],
+        zone2_45: [
+          { name: 'ウォームアップ',   durationSec: 300,  load: 1, rpm: 80, hr: '〜130',   type: 'warmup' },
+          { name: 'ゾーン2 本体',     durationSec: 2100, load: 2, rpm: 85, hr: '130–145', type: 'zone2' },
+          { name: 'クールダウン',     durationSec: 300,  load: 1, rpm: 70, hr: '〜120',   type: 'cooldown' }
+        ],
+        zone2_60: [
+          { name: 'ウォームアップ',   durationSec: 300,  load: 1, rpm: 80, hr: '〜130',   type: 'warmup' },
+          { name: 'ゾーン2 本体',     durationSec: 3000, load: 2, rpm: 85, hr: '130–145', type: 'zone2' },
+          { name: 'クールダウン',     durationSec: 300,  load: 1, rpm: 70, hr: '〜120',   type: 'cooldown' }
+        ]
+      };
+
+      const DEFAULT_SETTINGS = {
+        metroMode: 'double_accent', // 'double_accent' | 'double_even' | 'single'
+        volume: 0.8,
+        guideSound: true,
+        z2Alert: true,
+        muted: false
+      };
+
+      /* =========================================================
+         状態管理（State）
+         ========================================================= */
+      function deepClone(obj) {
+        return JSON.parse(JSON.stringify(obj));
+      }
+
+      function loadPlans() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEYS.PLANS);
+          if (!raw) return deepClone(DEFAULT_PLANS);
+          const parsed = JSON.parse(raw);
+          const merged = deepClone(DEFAULT_PLANS);
+          for (const key of Object.keys(DEFAULT_PLANS)) {
+            if (Array.isArray(parsed[key]) && parsed[key].length > 0) {
+              merged[key] = parsed[key];
+            }
+          }
+          return merged;
+        } catch (err) {
+          console.warn('Plans load fallback:', err);
+          return deepClone(DEFAULT_PLANS);
+        }
+      }
+
+      function savePlans() {
+        try {
+          localStorage.setItem(STORAGE_KEYS.PLANS, JSON.stringify(state.plans));
+        } catch (err) {
+          console.warn('Plans save failed:', err);
+        }
+      }
+
+      function loadSettings() {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+          if (!raw) return { ...DEFAULT_SETTINGS };
+          return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+        } catch (err) {
+          return { ...DEFAULT_SETTINGS };
+        }
+      }
+
+      function saveSettings() {
+        try {
+          localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(state.settings));
+        } catch (err) {
+          console.warn('Settings save failed:', err);
+        }
+      }
+
+      function loadLastMode() {
+        try {
+          const m = localStorage.getItem(STORAGE_KEYS.MODE);
+          return DEFAULT_PLANS[m] ? m : 'hiit4x4';
+        } catch (err) {
+          return 'hiit4x4';
+        }
+      }
+
+      const state = {
+        plans: loadPlans(),
+        settings: loadSettings(),
+        currentMode: loadLastMode(),
+        currentStepIndex: 0,
+        isRunning: false,
+        isPaused: false,
+
+        // タイムスタンプ差分管理用（ms）
+        stepElapsedMs: 0,
+        stepExtraMs: 0,
+        stepAnchorPerf: 0,
+
+        sessionElapsedMs: 0,
+        sessionAnchorPerf: 0,
+
+        // 通知の二重発火防止フラグ
+        countdownFiredSec: null,
+        z2Alert20Fired: false,
+        z2Alert35Fired: false,
+
+        // 編集中のステップインデックス
+        editingIndex: null
+      };
+
+      /* =========================================================
+         DOM要素キャッシュ
+         ========================================================= */
+      const dom = {
+        modeTabs: document.querySelectorAll('.mode-tab'),
+        wakeBadge: document.getElementById('wakeBadge'),
+        wakeBadgeText: document.getElementById('wakeBadgeText'),
+        btnOpenSettings: document.getElementById('btnOpenSettings'),
+
+        totalElapsedLabel: document.getElementById('totalElapsedLabel'),
+        totalRemainLabel: document.getElementById('totalRemainLabel'),
+        metroBpmInfo: document.getElementById('metroBpmInfo'),
+        timelineBar: document.getElementById('timelineBar'),
+
+        nextUpBanner: document.getElementById('nextUpBanner'),
+        nextUpText: document.getElementById('nextUpText'),
+        nextUpCountdown: document.getElementById('nextUpCountdown'),
+        z2CheckBanner: document.getElementById('z2CheckBanner'),
+        z2CheckText: document.getElementById('z2CheckText'),
+        btnDismissZ2Banner: document.getElementById('btnDismissZ2Banner'),
+
+        stageCard: document.getElementById('stageCard'),
+        zonePill: document.getElementById('zonePill'),
+        currentStepTitle: document.getElementById('currentStepTitle'),
+        stepCounter: document.getElementById('stepCounter'),
+        lampL: document.getElementById('lampL'),
+        lampR: document.getElementById('lampR'),
+        timerDigits: document.getElementById('timerDigits'),
+        stepElapsedText: document.getElementById('stepElapsedText'),
+        stepTotalText: document.getElementById('stepTotalText'),
+        extraTimePill: document.getElementById('extraTimePill'),
+        metricLoad: document.getElementById('metricLoad'),
+        metricRpm: document.getElementById('metricRpm'),
+        metricBpmSub: document.getElementById('metricBpmSub'),
+        metricHr: document.getElementById('metricHr'),
+        stepProgressFill: document.getElementById('stepProgressFill'),
+
+        btnPrev: document.getElementById('btnPrev'),
+        btnStartPause: document.getElementById('btnStartPause'),
+        iconPlayPause: document.getElementById('iconPlayPause'),
+        textPlayPause: document.getElementById('textPlayPause'),
+        btnNext: document.getElementById('btnNext'),
+        extendButtons: document.querySelectorAll('.btn-extend'),
+        btnMuteToggle: document.getElementById('btnMuteToggle'),
+        iconMute: document.getElementById('iconMute'),
+        textMute: document.getElementById('textMute'),
+        btnStopFull: document.getElementById('btnStopFull'),
+
+        planListTitle: document.getElementById('planListTitle'),
+        planTotalBadge: document.getElementById('planTotalBadge'),
+        stepList: document.getElementById('stepList'),
+
+        // 編集モーダル
+        editModal: document.getElementById('editModal'),
+        editModalTitle: document.getElementById('editModalTitle'),
+        editName: document.getElementById('editName'),
+        editType: document.getElementById('editType'),
+        editMin: document.getElementById('editMin'),
+        editSec: document.getElementById('editSec'),
+        editLoad: document.getElementById('editLoad'),
+        editRpm: document.getElementById('editRpm'),
+        editHr: document.getElementById('editHr'),
+        btnCloseEdit: document.getElementById('btnCloseEdit'),
+        btnCancelEdit: document.getElementById('btnCancelEdit'),
+        btnSaveEdit: document.getElementById('btnSaveEdit'),
+
+        // 設定モーダル
+        settingsModal: document.getElementById('settingsModal'),
+        btnCloseSettings: document.getElementById('btnCloseSettings'),
+        btnDoneSettings: document.getElementById('btnDoneSettings'),
+        settingMetroMode: document.getElementById('settingMetroMode'),
+        settingVolume: document.getElementById('settingVolume'),
+        settingVolumeVal: document.getElementById('settingVolumeVal'),
+        settingGuideSound: document.getElementById('settingGuideSound'),
+        settingZ2Alert: document.getElementById('settingZ2Alert'),
+        btnSoundTest: document.getElementById('btnSoundTest'),
+        btnResetCurrentPlan: document.getElementById('btnResetCurrentPlan'),
+
+        // 確認モーダル
+        confirmModal: document.getElementById('confirmModal'),
+        confirmTitle: document.getElementById('confirmTitle'),
+        confirmMessage: document.getElementById('confirmMessage'),
+        btnConfirmCancel: document.getElementById('btnConfirmCancel'),
+        btnConfirmOk: document.getElementById('btnConfirmOk'),
+
+        // 完了モーダル
+        finishModal: document.getElementById('finishModal'),
+        finishModeName: document.getElementById('finishModeName'),
+        finishTotalTime: document.getElementById('finishTotalTime'),
+        btnFinishClose: document.getElementById('btnFinishClose'),
+
+        toast: document.getElementById('toast')
+      };
+
+      /* =========================================================
+         Web Audio API 高精度先読みメトロノーム & ガイド音エンジン
+         ========================================================= */
+      const audioEngine = {
+        ctx: null,
+        lookaheadMs: 25,
+        scheduleAheadSec: 0.1,
+        timerId: null,
+        nextNoteTime: 0,
+        beatIndex: 0,
+        visualTimeouts: [],
+
+        init() {
+          try {
+            if (!this.ctx) {
+              const AudioCtx = window.AudioContext || window.webkitAudioContext;
+              if (!AudioCtx) return false;
+              this.ctx = new AudioCtx();
+            }
+            if (this.ctx.state === 'suspended') {
+              this.ctx.resume();
+            }
+            // iOS Safari オーディオアンロック用の無音1フレーム再生
+            const buffer = this.ctx.createBuffer(1, 1, 22050);
+            const source = this.ctx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(this.ctx.destination);
+            source.start(0);
+            return true;
+          } catch (err) {
+            console.warn('Web Audio init failed:', err);
+            return false;
+          }
+        },
+
+        getCurrentBpm() {
+          const step = getCurrentStep();
+          if (!step) return 120;
+          const rpm = Math.max(30, Math.min(180, Number(step.rpm) || 80));
+          return state.settings.metroMode === 'single' ? rpm : rpm * 2;
+        },
+
+        startMetronome() {
+          if (!this.init() || !this.ctx) return;
+          this.stopMetronome();
+          this.beatIndex = 0;
+          this.nextNoteTime = this.ctx.currentTime + 0.05;
+          this.timerId = setInterval(() => this.scheduler(), this.lookaheadMs);
+        },
+
+        stopMetronome() {
+          if (this.timerId !== null) {
+            clearInterval(this.timerId);
+            this.timerId = null;
+          }
+          this.clearVisuals();
+        },
+
+        resyncTempo() {
+          if (!this.ctx || this.timerId === null) return;
+          // ステップ切替時に新しいRPMの拍に気持ちよく同期させる
+          const now = this.ctx.currentTime;
+          if (this.nextNoteTime > now + 0.2) {
+            this.nextNoteTime = now + 0.06;
+          }
+        },
+
+        clearVisuals() {
+          while (this.visualTimeouts.length) {
+            clearTimeout(this.visualTimeouts.pop());
+          }
+          dom.lampL.classList.remove('lit', 'lit-soft');
+          dom.lampR.classList.remove('lit', 'lit-soft');
+        },
+
+        scheduler() {
+          if (!this.ctx || !state.isRunning) return;
+          while (this.nextNoteTime < this.ctx.currentTime + this.scheduleAheadSec) {
+            this.scheduleBeat(this.beatIndex, this.nextNoteTime);
+            const bpm = this.getCurrentBpm();
+            const secondsPerBeat = 60.0 / bpm;
+            this.nextNoteTime += secondsPerBeat;
+            this.beatIndex = (this.beatIndex + 1) % 2;
+          }
+        },
+
+        scheduleBeat(beatIdx, time) {
+          const mode = state.settings.metroMode;
+          const isRight = beatIdx === 0; // 0 = 右(強), 1 = 左(弱)
+
+          // 音の出力（ミュート時は無音だがL/Rランプは光らせる）
+          if (!state.settings.muted && this.ctx) {
+            const vol = state.settings.volume;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+
+            let startFreq = 1080;
+            let endFreq = 680;
+            let peakGain = vol * 0.52;
+
+            if (mode === 'double_accent' && !isRight) {
+              startFreq = 760;
+              endFreq = 500;
+              peakGain = vol * 0.34;
+            }
+
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(startFreq, time);
+            osc.frequency.exponentialRampToValueAtTime(endFreq, time + 0.025);
+
+            gain.gain.setValueAtTime(0.0001, time);
+            gain.gain.linearRampToValueAtTime(peakGain, time + 0.002);
+            gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.032);
+
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(time);
+            osc.stop(time + 0.038);
+          }
+
+          // ビジュアル L / R インジケーターを音声タイミングに厳密同期
+          const delayMs = Math.max(0, (time - this.ctx.currentTime) * 1000);
+          const tid = setTimeout(() => {
+            if (!state.isRunning) return;
+            if (mode === 'single') {
+              flashLamp(dom.lampL, 'lit');
+              flashLamp(dom.lampR, 'lit');
+            } else if (isRight) {
+              flashLamp(dom.lampR, 'lit');
+            } else {
+              flashLamp(dom.lampL, mode === 'double_accent' ? 'lit-soft' : 'lit');
+            }
+          }, delayMs);
+          this.visualTimeouts.push(tid);
+        },
+
+        // 残り3・2・1秒カウントダウン音
+        playCountdownBeep() {
+          if (!state.settings.guideSound || !this.init() || !this.ctx) return;
+          const now = this.ctx.currentTime;
+          const vol = state.settings.volume * 0.45;
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, now);
+          gain.gain.setValueAtTime(0.0001, now);
+          gain.gain.linearRampToValueAtTime(vol, now + 0.008);
+          gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.095);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.11);
+        },
+
+        // ステップ切替チャイム（強度種別で音色を少し変える）
+        playStepTransition(stepType) {
+          if (!state.settings.guideSound || !this.init() || !this.ctx) return;
+          const now = this.ctx.currentTime;
+          const vol = state.settings.volume * 0.45;
+          const notes = stepType === 'hiit'
+            ? [523.25, 659.25, 783.99, 1046.5] // 高強度突入：力強い上昇和音
+            : (stepType === 'recovery' || stepType === 'cooldown')
+              ? [783.99, 659.25, 523.25]       // 回復/CD：落ち着く下降和音
+              : [587.33, 880.0];               // その他：明瞭な2音
+
+          notes.forEach((freq, idx) => {
+            const t = now + idx * 0.075;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.linearRampToValueAtTime(vol, t + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.24);
+          });
+        },
+
+        // Zone 2 定負荷テスト（20分・35分）専用ベル通知
+        playZ2TestChime() {
+          if (!this.init() || !this.ctx) return;
+          const now = this.ctx.currentTime;
+          const vol = state.settings.volume * 0.5;
+          const pattern = [659.25, 880.0, 659.25, 1174.66];
+          pattern.forEach((freq, idx) => {
+            const t = now + idx * 0.13;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.linearRampToValueAtTime(vol, t + 0.01);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.32);
+          });
+        },
+
+        // 完了ファンファーレ
+        playCompleteChime() {
+          if (!this.init() || !this.ctx) return;
+          const now = this.ctx.currentTime;
+          const vol = state.settings.volume * 0.5;
+          const notes = [523.25, 659.25, 783.99, 1046.5];
+          notes.forEach((freq, idx) => {
+            const t = now + idx * 0.11;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(freq, t);
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.linearRampToValueAtTime(vol, t + 0.015);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.48);
+          });
+        },
+
+        // 設定モーダルからのサウンドテスト
+        playTestSequence() {
+          if (!this.init() || !this.ctx) return;
+          const now = this.ctx.currentTime;
+          // 強・弱クリックを2回鳴らしてから切替音
+          for (let i = 0; i < 4; i++) {
+            const t = now + i * 0.28;
+            const isRight = i % 2 === 0;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            const vol = state.settings.volume;
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(isRight ? 1080 : 760, t);
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.linearRampToValueAtTime(isRight ? vol * 0.5 : vol * 0.34, t + 0.002);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.032);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(t);
+            osc.stop(t + 0.04);
+          }
+          setTimeout(() => this.playStepTransition('hiit'), 1200);
+        }
+      };
+
+      function flashLamp(el, cls) {
+        el.classList.remove('lit', 'lit-soft');
+        // Reflowを挟んで連続点灯時のアニメを確実に効かせる
+        void el.offsetWidth;
+        el.classList.add(cls);
+        setTimeout(() => el.classList.remove(cls), 115);
+      }
+
+      /* =========================================================
+         Screen Wake Lock API 管理（画面スリープ防止）
+         ========================================================= */
+      const wakeManager = {
+        sentinel: null,
+        supported: 'wakeLock' in navigator,
+
+        updateBadge() {
+          if (!this.supported) {
+            dom.wakeBadge.classList.remove('active');
+            dom.wakeBadgeText.textContent = '常灯 非対応';
+            return;
+          }
+          if (this.sentinel) {
+            dom.wakeBadge.classList.add('active');
+            dom.wakeBadgeText.textContent = '画面常灯 ON';
+          } else {
+            dom.wakeBadge.classList.remove('active');
+            dom.wakeBadgeText.textContent = '常灯 待機';
+          }
+        },
+
+        async acquire() {
+          if (!this.supported) {
+            this.updateBadge();
+            return;
+          }
+          try {
+            if (this.sentinel) return;
+            this.sentinel = await navigator.wakeLock.request('screen');
+            this.sentinel.addEventListener('release', () => {
+              this.sentinel = null;
+              this.updateBadge();
+            });
+            this.updateBadge();
+          } catch (err) {
+            console.warn('Wake Lock request failed:', err);
+            this.sentinel = null;
+            this.updateBadge();
+          }
+        },
+
+        async release() {
+          try {
+            if (this.sentinel) {
+              await this.sentinel.release();
+              this.sentinel = null;
+            }
+          } catch (err) {
+            console.warn('Wake Lock release error:', err);
+          } finally {
+            this.updateBadge();
+          }
+        }
+      };
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && state.isRunning) {
+          wakeManager.acquire();
+          // バックグラウンド復帰時に即時タイマー再評価
+          tickTimer();
+        }
+      });
+
+      /* =========================================================
+         ユーティリティ関数
+         ========================================================= */
+      function getSteps() {
+        return state.plans[state.currentMode];
+      }
+
+      function getCurrentStep() {
+        const steps = getSteps();
+        return steps[state.currentStepIndex] || steps[0];
+      }
+
+      function getCurrentStepTotalMs() {
+        const step = getCurrentStep();
+        return Math.max(1000, step.durationSec * 1000 + state.stepExtraMs);
+      }
+
+      function formatTime(totalSec) {
+        const s = Math.max(0, Math.floor(totalSec));
+        const mins = Math.floor(s / 60);
+        const secs = s % 60;
+        return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+      }
+
+      function formatDurationShort(totalSec) {
+        const mins = Math.floor(totalSec / 60);
+        const secs = totalSec % 60;
+        if (secs === 0) return `${mins}分`;
+        if (mins === 0) return `${secs}秒`;
+        return `${mins}分${secs}秒`;
+      }
+
+      let toastTimer = null;
+      function showToast(msg) {
+        dom.toast.textContent = msg;
+        dom.toast.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => dom.toast.classList.remove('show'), 2200);
+      }
+
+      /* =========================================================
+         カスタム確認モーダル（confirm代替）
+         ========================================================= */
+      let confirmCallback = null;
+
+      function openConfirm({ title, message, okText = '実行する', danger = true, onOk }) {
+        dom.confirmTitle.textContent = title;
+        dom.confirmMessage.textContent = message;
+        dom.btnConfirmOk.textContent = okText;
+        dom.btnConfirmOk.className = danger ? 'btn btn-confirm-danger' : 'btn btn-save';
+        confirmCallback = onOk;
+        dom.confirmModal.classList.add('open');
+      }
+
+      function closeConfirm() {
+        dom.confirmModal.classList.remove('open');
+        confirmCallback = null;
+      }
+
+      dom.btnConfirmCancel.addEventListener('click', closeConfirm);
+      dom.btnConfirmOk.addEventListener('click', () => {
+        const fn = confirmCallback;
+        closeConfirm();
+        if (typeof fn === 'function') fn();
+      });
+
+      /* =========================================================
+         タイマー＆ステップ進行ロジック（タイムスタンプ差分方式）
+         ========================================================= */
+      let rafId = null;
+      let bgIntervalId = null;
+
+      function startSession() {
+        audioEngine.init();
+        const now = performance.now();
+        state.isRunning = true;
+        state.isPaused = false;
+        state.stepAnchorPerf = now - state.stepElapsedMs;
+        state.sessionAnchorPerf = now - state.sessionElapsedMs;
+
+        audioEngine.startMetronome();
+        wakeManager.acquire();
+        startLoop();
+        renderControls();
+      }
+
+      function pauseSession() {
+        if (!state.isRunning) return;
+        const now = performance.now();
+        state.stepElapsedMs = now - state.stepAnchorPerf;
+        state.sessionElapsedMs = now - state.sessionAnchorPerf;
+        state.isRunning = false;
+        state.isPaused = true;
+
+        audioEngine.stopMetronome();
+        wakeManager.release();
+        stopLoop();
+        renderControls();
+        renderTimerDisplay();
+      }
+
+      function resetSession(keepMode = true) {
+        state.isRunning = false;
+        state.isPaused = false;
+        state.currentStepIndex = 0;
+        state.stepElapsedMs = 0;
+        state.stepExtraMs = 0;
+        state.sessionElapsedMs = 0;
+        state.countdownFiredSec = null;
+        state.z2Alert20Fired = false;
+        state.z2Alert35Fired = false;
+
+        audioEngine.stopMetronome();
+        wakeManager.release();
+        stopLoop();
+        dom.nextUpBanner.classList.remove('visible');
+        dom.z2CheckBanner.classList.remove('visible');
+
+        renderAll();
+      }
+
+      function startLoop() {
+        stopLoop();
+        const loop = () => {
+          if (!state.isRunning) return;
+          tickTimer();
+          rafId = requestAnimationFrame(loop);
+        };
+        rafId = requestAnimationFrame(loop);
+        // 画面非アクティブ時の補助チェック
+        bgIntervalId = setInterval(() => {
+          if (state.isRunning) tickTimer();
+        }, 250);
+      }
+
+      function stopLoop() {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
+        if (bgIntervalId !== null) {
+          clearInterval(bgIntervalId);
+          bgIntervalId = null;
+        }
+      }
+
+      function tickTimer() {
+        if (!state.isRunning) return;
+        const now = performance.now();
+        state.stepElapsedMs = Math.max(0, now - state.stepAnchorPerf);
+        state.sessionElapsedMs = Math.max(0, now - state.sessionAnchorPerf);
+
+        // Zone 2 定負荷テスト通知チェック（20分 = 1200s, 35分 = 2100s）
+        if (state.settings.z2Alert && (state.currentMode === 'zone2_45' || state.currentMode === 'zone2_60')) {
+          const sessSec = state.sessionElapsedMs / 1000;
+          if (!state.z2Alert20Fired && sessSec >= 1200) {
+            state.z2Alert20Fired = true;
+            triggerZ2Alert('20分経過：現在の心拍数を記録してください！');
+          }
+          if (!state.z2Alert35Fired && sessSec >= 2100) {
+            state.z2Alert35Fired = true;
+            triggerZ2Alert('35分経過：現在の心拍数を記録してください！');
+          }
+        }
+
+        const totalMs = getCurrentStepTotalMs();
+        const remainMs = totalMs - state.stepElapsedMs;
+
+        // 残り3・2・1秒のカウントダウン音
+        const remainCeilSec = Math.ceil(remainMs / 1000);
+        if (remainCeilSec >= 1 && remainCeilSec <= 3 && state.countdownFiredSec !== remainCeilSec) {
+          state.countdownFiredSec = remainCeilSec;
+          audioEngine.playCountdownBeep();
+        }
+
+        // ステップ終了・自動遷移判定
+        if (remainMs <= 0) {
+          const overflowMs = Math.abs(remainMs);
+          advanceToNextStep(overflowMs);
+          return;
+        }
+
+        renderTimerDisplay();
+      }
+
+      function triggerZ2Alert(message) {
+        dom.z2CheckText.textContent = message;
+        dom.z2CheckBanner.classList.add('visible');
+        audioEngine.playZ2TestChime();
+      }
+
+      function advanceToNextStep(overflowMs = 0) {
+        const steps = getSteps();
+        if (state.currentStepIndex + 1 < steps.length) {
+          state.currentStepIndex += 1;
+          state.stepExtraMs = 0;
+          state.stepElapsedMs = Math.min(overflowMs, getCurrentStepTotalMs() - 100);
+          state.stepAnchorPerf = performance.now() - state.stepElapsedMs;
+          state.countdownFiredSec = null;
+
+          const newStep = getCurrentStep();
+          audioEngine.playStepTransition(newStep.type);
+          audioEngine.resyncTempo();
+
+          renderAll();
+          scrollActiveStepIntoView();
+        } else {
+          // 全ステップ完了
+          completeSession();
+        }
+      }
+
+      function completeSession() {
+        const finalSec = Math.round(state.sessionElapsedMs / 1000);
+        state.isRunning = false;
+        state.isPaused = false;
+        audioEngine.stopMetronome();
+        wakeManager.release();
+        stopLoop();
+
+        audioEngine.playCompleteChime();
+        dom.finishModeName.textContent = MODE_LABELS[state.currentMode];
+        dom.finishTotalTime.textContent = formatTime(finalSec);
+        dom.finishModal.classList.add('open');
+        renderControls();
+      }
+
+      function jumpToStep(index, announce = true) {
+        const steps = getSteps();
+        const clamped = Math.max(0, Math.min(steps.length - 1, index));
+        state.currentStepIndex = clamped;
+        state.stepElapsedMs = 0;
+        state.stepExtraMs = 0;
+        state.countdownFiredSec = null;
+
+        if (state.isRunning) {
+          state.stepAnchorPerf = performance.now();
+          audioEngine.resyncTempo();
+          if (announce) audioEngine.playStepTransition(getCurrentStep().type);
+        }
+
+        renderAll();
+        scrollActiveStepIntoView();
+      }
+
+      function extendCurrentStep(addSec, btnEl) {
+        state.stepExtraMs += addSec * 1000;
+        // 残り3秒を切っていた場合にカウントダウンを再有効化
+        const remainSec = Math.ceil((getCurrentStepTotalMs() - state.stepElapsedMs) / 1000);
+        if (remainSec > 3) {
+          state.countdownFiredSec = null;
+        }
+        if (btnEl) {
+          btnEl.classList.add('flash');
+          setTimeout(() => btnEl.classList.remove('flash'), 240);
+        }
+        showToast(`現在のステップを +${addSec >= 60 ? (addSec / 60) + '分' : addSec + '秒'} 延長しました`);
+        renderTimeline();
+        renderTimerDisplay();
+      }
+
+      function isSessionDirty() {
+        return state.isRunning || state.isPaused || state.currentStepIndex > 0 || state.stepElapsedMs > 0 || state.stepExtraMs > 0;
+      }
+
+      /* =========================================================
+         レンダリング処理
+         ========================================================= */
+      function applyThemeForStep(step) {
+        const meta = ZONE_META[step.type] || ZONE_META.warmup;
+        const root = document.documentElement;
+        root.style.setProperty('--accent', meta.color);
+        root.style.setProperty('--accent-glow', meta.glow);
+        root.style.setProperty('--accent-soft', meta.soft);
+        dom.zonePill.textContent = meta.label;
+      }
+
+      function renderModeTabs() {
+        dom.modeTabs.forEach((tab) => {
+          tab.classList.toggle('active', tab.dataset.mode === state.currentMode);
+        });
+      }
+
+      function renderCurrentStepMeta() {
+        const steps = getSteps();
+        const step = getCurrentStep();
+        applyThemeForStep(step);
+
+        dom.currentStepTitle.textContent = step.name;
+        dom.stepCounter.textContent = `${state.currentStepIndex + 1} / ${steps.length}`;
+        dom.metricLoad.textContent = step.load;
+        dom.metricRpm.textContent = step.rpm;
+        dom.metricHr.textContent = step.hr || '—';
+
+        const bpm = audioEngine.getCurrentBpm();
+        const bpmSuffix = state.settings.metroMode === 'single' ? `${bpm} BPM (等倍)` : `${bpm} BPM (2倍)`;
+        dom.metricBpmSub.textContent = bpmSuffix;
+        dom.metroBpmInfo.textContent = `メトロノーム ${bpm} BPM`;
+
+        dom.btnPrev.disabled = state.currentStepIndex === 0 && state.stepElapsedMs < 1500;
+        dom.btnNext.disabled = state.currentStepIndex >= steps.length - 1;
+      }
+
+      function renderTimerDisplay() {
+        const steps = getSteps();
+        const totalStepMs = getCurrentStepTotalMs();
+        const elapsedMs = Math.min(state.stepElapsedMs, totalStepMs);
+        const remainMs = Math.max(0, totalStepMs - elapsedMs);
+
+        // 残り時間は切り上げ表示（03:00 → 02:59 ... 00:01 → 00:00）
+        const remainSecDisp = Math.ceil(remainMs / 1000);
+        const elapsedSecDisp = Math.floor(elapsedMs / 1000);
+        const totalSecDisp = Math.round(totalStepMs / 1000);
+
+        dom.timerDigits.textContent = formatTime(remainSecDisp);
+        dom.stepElapsedText.textContent = formatTime(elapsedSecDisp);
+        dom.stepTotalText.textContent = formatTime(totalSecDisp);
+
+        // 延長ピル表示
+        if (state.stepExtraMs > 0) {
+          const extraSec = Math.round(state.stepExtraMs / 1000);
+          dom.extraTimePill.textContent = `延長 +${formatDurationShort(extraSec)}`;
+          dom.extraTimePill.classList.add('show');
+        } else {
+          dom.extraTimePill.classList.remove('show');
+        }
+
+        // ステップ内プログレス
+        const stepPct = Math.min(100, (elapsedMs / totalStepMs) * 100);
+        dom.stepProgressFill.style.width = `${stepPct.toFixed(2)}%`;
+
+        // 全体経過・残り時間計算
+        let pastSec = 0;
+        let futureSec = 0;
+        for (let i = 0; i < steps.length; i++) {
+          if (i < state.currentStepIndex) pastSec += steps[i].durationSec;
+          else if (i > state.currentStepIndex) futureSec += steps[i].durationSec;
+        }
+        const totalElapsedAll = pastSec + elapsedMs / 1000;
+        const totalRemainAll = futureSec + remainMs / 1000;
+
+        dom.totalElapsedLabel.textContent = formatTime(totalElapsedAll);
+        dom.totalRemainLabel.textContent = formatTime(Math.ceil(totalRemainAll));
+
+        // 全体タイムラインの現在セグメント塗りつぶし更新
+        const segFill = dom.timelineBar.querySelector(`[data-seg-idx="${state.currentStepIndex}"] .tl-seg-fill`);
+        if (segFill) {
+          segFill.style.width = `${stepPct.toFixed(1)}%`;
+        }
+
+        // 残り10秒以下で次ステップ予告バナーを表示
+        const nextStep = steps[state.currentStepIndex + 1];
+        if (state.isRunning && nextStep && remainSecDisp <= 10 && remainSecDisp > 0) {
+          dom.nextUpText.textContent = `次 → ${nextStep.name}｜負荷 ${nextStep.load}｜${nextStep.rpm} RPM`;
+          dom.nextUpCountdown.textContent = `あと ${remainSecDisp}秒`;
+          dom.nextUpBanner.classList.add('visible');
+        } else {
+          dom.nextUpBanner.classList.remove('visible');
+        }
+      }
+
+      function renderTimeline() {
+        const steps = getSteps();
+        dom.timelineBar.innerHTML = '';
+
+        steps.forEach((step, idx) => {
+          const seg = document.createElement('div');
+          seg.className = 'tl-seg' + (idx === state.currentStepIndex ? ' current' : '');
+          seg.dataset.segIdx = String(idx);
+          const weight = idx === state.currentStepIndex
+            ? step.durationSec + state.stepExtraMs / 1000
+            : step.durationSec;
+          seg.style.flexGrow = String(Math.max(10, weight));
+          seg.title = `${idx + 1}. ${step.name}`;
+
+          const fill = document.createElement('div');
+          fill.className = 'tl-seg-fill';
+          const meta = ZONE_META[step.type] || ZONE_META.warmup;
+          fill.style.background = meta.color;
+          if (idx < state.currentStepIndex) {
+            fill.style.width = '100%';
+          } else if (idx === state.currentStepIndex) {
+            const pct = Math.min(100, (state.stepElapsedMs / getCurrentStepTotalMs()) * 100);
+            fill.style.width = `${pct.toFixed(1)}%`;
+          }
+
+          seg.appendChild(fill);
+          seg.addEventListener('click', () => {
+            if (idx !== state.currentStepIndex) {
+              jumpToStep(idx);
+              showToast(`「${step.name}」へ移動しました`);
+            }
+          });
+          dom.timelineBar.appendChild(seg);
+        });
+      }
+
+      function renderStepList() {
+        const steps = getSteps();
+        const totalSec = steps.reduce((acc, s) => acc + s.durationSec, 0);
+        dom.planListTitle.textContent = `${MODE_LABELS[state.currentMode]} ステップ一覧`;
+        dom.planTotalBadge.textContent = `計 ${formatDurationShort(totalSec)}`;
+
+        dom.stepList.innerHTML = '';
+        steps.forEach((step, idx) => {
+          const meta = ZONE_META[step.type] || ZONE_META.warmup;
+          const item = document.createElement('div');
+          item.className = 'step-item';
+          if (idx < state.currentStepIndex) item.classList.add('done');
+          if (idx === state.currentStepIndex) item.classList.add('current');
+          item.style.setProperty('--item-color', meta.color);
+          item.dataset.stepIdx = String(idx);
+
+          const idxBadge = document.createElement('div');
+          idxBadge.className = 'step-idx';
+          idxBadge.textContent = String(idx + 1);
+
+          const info = document.createElement('div');
+          info.className = 'step-info';
+          info.innerHTML = `
+            <div class="step-name-line">
+              <span>${escapeHtml(step.name)}</span>
+            </div>
+            <div class="step-specs">
+              <span class="spec-chip">負荷 <strong>${step.load}</strong></span>
+              <span class="spec-chip"><strong>${formatTime(step.durationSec)}</strong></span>
+              <span class="spec-chip"><strong>${step.rpm}</strong> rpm</span>
+              <span class="spec-chip">HR ${escapeHtml(step.hr || '—')}</span>
+            </div>
+          `;
+          info.addEventListener('click', () => {
+            if (idx !== state.currentStepIndex) {
+              jumpToStep(idx);
+              showToast(`「${step.name}」から開始します`);
+            }
+          });
+
+          const editBtn = document.createElement('button');
+          editBtn.type = 'button';
+          editBtn.className = 'btn-edit-step';
+          editBtn.textContent = '編集';
+          editBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openEditModal(idx);
+          });
+
+          item.appendChild(idxBadge);
+          item.appendChild(info);
+          item.appendChild(editBtn);
+          dom.stepList.appendChild(item);
+        });
+      }
+
+      function scrollActiveStepIntoView() {
+        const activeEl = dom.stepList.querySelector('.step-item.current');
+        if (activeEl) {
+          activeEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }
+
+      function renderControls() {
+        if (state.isRunning) {
+          dom.btnStartPause.classList.add('running');
+          dom.textPlayPause.textContent = '一時停止';
+          dom.iconPlayPause.innerHTML = '<rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect>';
+        } else {
+          dom.btnStartPause.classList.remove('running');
+          dom.textPlayPause.textContent = state.isPaused ? '再開' : 'スタート';
+          dom.iconPlayPause.innerHTML = '<polygon points="6 4 20 12 6 20 6 4"></polygon>';
+        }
+
+        // ミュート状態
+        if (state.settings.muted) {
+          dom.btnMuteToggle.classList.add('is-muted');
+          dom.textMute.textContent = 'メトロノーム 消音中';
+          dom.iconMute.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><line x1="23" y1="9" x2="17" y2="15"></line><line x1="17" y1="9" x2="23" y2="15"></line>';
+        } else {
+          dom.btnMuteToggle.classList.remove('is-muted');
+          dom.textMute.textContent = 'メトロノーム ON';
+          dom.iconMute.innerHTML = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path><path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>';
+        }
+      }
+
+      function renderAll() {
+        renderModeTabs();
+        renderCurrentStepMeta();
+        renderTimeline();
+        renderTimerDisplay();
+        renderStepList();
+        renderControls();
+      }
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      /* =========================================================
+         ステップ編集モーダル制御
+         ========================================================= */
+      function openEditModal(idx) {
+        const step = getSteps()[idx];
+        if (!step) return;
+        state.editingIndex = idx;
+        dom.editModalTitle.textContent = `ステップ ${idx + 1} を編集`;
+        dom.editName.value = step.name;
+        dom.editType.value = step.type;
+        dom.editMin.value = Math.floor(step.durationSec / 60);
+        dom.editSec.value = step.durationSec % 60;
+        dom.editLoad.value = step.load;
+        dom.editRpm.value = step.rpm;
+        dom.editHr.value = step.hr || '';
+        dom.editModal.classList.add('open');
+      }
+
+      function closeEditModal() {
+        dom.editModal.classList.remove('open');
+        state.editingIndex = null;
+      }
+
+      function saveEditedStep() {
+        if (state.editingIndex === null) return;
+        const steps = getSteps();
+        const target = steps[state.editingIndex];
+        if (!target) return;
+
+        const name = dom.editName.value.trim() || target.name;
+        const type = ZONE_META[dom.editType.value] ? dom.editType.value : target.type;
+        const mins = Math.max(0, Math.min(120, parseInt(dom.editMin.value, 10) || 0));
+        const secs = Math.max(0, Math.min(59, parseInt(dom.editSec.value, 10) || 0));
+        const durationSec = Math.max(10, mins * 60 + secs);
+        const load = Math.max(1, Math.min(32, parseInt(dom.editLoad.value, 10) || 1));
+        const rpm = Math.max(30, Math.min(150, parseInt(dom.editRpm.value, 10) || 80));
+        const hr = dom.editHr.value.trim() || '—';
+
+        steps[state.editingIndex] = { name, durationSec, load, rpm, hr, type };
+        savePlans();
+
+        // 実行中ステップを編集した場合は即座に整合性を取って反映
+        if (state.editingIndex === state.currentStepIndex) {
+          const newTotalMs = getCurrentStepTotalMs();
+          if (state.stepElapsedMs >= newTotalMs) {
+            state.stepElapsedMs = Math.max(0, newTotalMs - 1000);
+            if (state.isRunning) {
+              state.stepAnchorPerf = performance.now() - state.stepElapsedMs;
+            }
+          }
+          if (state.isRunning) {
+            audioEngine.resyncTempo();
+          }
+        }
+
+        closeEditModal();
+        renderAll();
+        showToast('ステップ設定を保存しました');
+      }
+
+      // 編集モーダル内の +/- ステッパーボタン共通処理
+      dom.editModal.querySelectorAll('.stepper-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const input = document.getElementById(btn.dataset.target);
+          if (!input) return;
+          const delta = parseInt(btn.dataset.delta, 10);
+          const min = parseInt(input.min, 10);
+          const max = parseInt(input.max, 10);
+          let val = (parseInt(input.value, 10) || 0) + delta;
+
+          // 秒の繰り上がり・繰り下がり補助
+          if (input.id === 'editSec') {
+            let curMin = parseInt(dom.editMin.value, 10) || 0;
+            if (val >= 60) {
+              val -= 60;
+              dom.editMin.value = Math.min(120, curMin + 1);
+            } else if (val < 0) {
+              if (curMin > 0) {
+                val += 60;
+                dom.editMin.value = curMin - 1;
+              } else {
+                val = 0;
+              }
+            }
+          }
+
+          val = Math.max(min, Math.min(max, val));
+          input.value = val;
+        });
+      });
+
+      dom.btnCloseEdit.addEventListener('click', closeEditModal);
+      dom.btnCancelEdit.addEventListener('click', closeEditModal);
+      dom.btnSaveEdit.addEventListener('click', saveEditedStep);
+
+      /* =========================================================
+         設定モーダル制御
+         ========================================================= */
+      function openSettingsModal() {
+        dom.settingMetroMode.value = state.settings.metroMode;
+        const pct = Math.round(state.settings.volume * 100);
+        dom.settingVolume.value = pct;
+        dom.settingVolumeVal.textContent = `${pct}%`;
+        dom.settingGuideSound.checked = state.settings.guideSound;
+        dom.settingZ2Alert.checked = state.settings.z2Alert;
+        dom.settingsModal.classList.add('open');
+      }
+
+      function closeSettingsModal() {
+        dom.settingsModal.classList.remove('open');
+      }
+
+      dom.btnOpenSettings.addEventListener('click', openSettingsModal);
+      dom.btnCloseSettings.addEventListener('click', closeSettingsModal);
+      dom.btnDoneSettings.addEventListener('click', closeSettingsModal);
+
+      dom.settingMetroMode.addEventListener('change', () => {
+        state.settings.metroMode = dom.settingMetroMode.value;
+        saveSettings();
+        renderCurrentStepMeta();
+        if (state.isRunning) audioEngine.resyncTempo();
+      });
+
+      dom.settingVolume.addEventListener('input', () => {
+        const pct = parseInt(dom.settingVolume.value, 10);
+        dom.settingVolumeVal.textContent = `${pct}%`;
+        state.settings.volume = pct / 100;
+        saveSettings();
+      });
+
+      dom.settingGuideSound.addEventListener('change', () => {
+        state.settings.guideSound = dom.settingGuideSound.checked;
+        saveSettings();
+      });
+
+      dom.settingZ2Alert.addEventListener('change', () => {
+        state.settings.z2Alert = dom.settingZ2Alert.checked;
+        saveSettings();
+      });
+
+      dom.btnSoundTest.addEventListener('click', () => {
+        audioEngine.playTestSequence();
+        showToast('サウンドテスト再生中…');
+      });
+
+      dom.btnResetCurrentPlan.addEventListener('click', () => {
+        openConfirm({
+          title: '初期プランに戻す',
+          message: `「${MODE_LABELS[state.currentMode]}」の編集済みステップをすべて初期プランに戻します。よろしいですか？`,
+          okText: '初期プランに戻す',
+          danger: true,
+          onOk: () => {
+            state.plans[state.currentMode] = deepClone(DEFAULT_PLANS[state.currentMode]);
+            savePlans();
+            closeSettingsModal();
+            resetSession();
+            showToast('初期プランにリセットしました');
+          }
+        });
+      });
+
+      /* =========================================================
+         メインボタン・イベント登録
+         ========================================================= */
+      // モード切替（実行中の誤切替防止付き）
+      dom.modeTabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const targetMode = tab.dataset.mode;
+          if (targetMode === state.currentMode) return;
+
+          const doSwitch = () => {
+            state.currentMode = targetMode;
+            try {
+              localStorage.setItem(STORAGE_KEYS.MODE, targetMode);
+            } catch (e) {}
+            resetSession();
+            showToast(`${MODE_LABELS[targetMode]} に切り替えました`);
+          };
+
+          if (isSessionDirty()) {
+            openConfirm({
+              title: 'モードを切り替えますか？',
+              message: '現在のトレーニング進行状況がリセットされ、選択したモードの先頭から開始されます。',
+              okText: '切り替える',
+              danger: true,
+              onOk: doSwitch
+            });
+          } else {
+            doSwitch();
+          }
+        });
+      });
+
+      // スタート / 一時停止
+      dom.btnStartPause.addEventListener('click', () => {
+        if (state.isRunning) {
+          pauseSession();
+        } else {
+          startSession();
+        }
+      });
+
+      // ステップ戻り（3秒以上経過していれば先頭へ戻す、それ未満なら前のステップへ）
+      dom.btnPrev.addEventListener('click', () => {
+        if (state.stepElapsedMs > 3000) {
+          jumpToStep(state.currentStepIndex, false);
+          showToast('現在のステップを先頭に戻しました');
+        } else if (state.currentStepIndex > 0) {
+          jumpToStep(state.currentStepIndex - 1);
+          showToast(`前のステップ「${getCurrentStep().name}」へ戻りました`);
+        }
+      });
+
+      // ステップスキップ
+      dom.btnNext.addEventListener('click', () => {
+        const steps = getSteps();
+        if (state.currentStepIndex < steps.length - 1) {
+          jumpToStep(state.currentStepIndex + 1);
+          showToast(`「${getCurrentStep().name}」へスキップしました`);
+        }
+      });
+
+      // 延長ボタン（+10s / +30s / +1m / +2m）
+      dom.extendButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const sec = parseInt(btn.dataset.extend, 10);
+          if (sec > 0) extendCurrentStep(sec, btn);
+        });
+      });
+
+      // メトロノームミュート切替
+      dom.btnMuteToggle.addEventListener('click', () => {
+        state.settings.muted = !state.settings.muted;
+        saveSettings();
+        renderControls();
+        showToast(state.settings.muted ? 'メトロノームを消音にしました' : 'メトロノームをONにしました');
+      });
+
+      // 完全終了（確認モーダルあり）
+      dom.btnStopFull.addEventListener('click', () => {
+        if (!isSessionDirty()) {
+          showToast('すでに初期状態です');
+          return;
+        }
+        openConfirm({
+          title: 'トレーニングを完全終了しますか？',
+          message: 'タイマーとメトロノームを停止し、ステップ1の初期状態に戻します。',
+          okText: '完全終了する',
+          danger: true,
+          onOk: () => {
+            resetSession();
+            showToast('トレーニングを終了しました');
+          }
+        });
+      });
+
+      // Zone 2 チェックバナー閉じる
+      dom.btnDismissZ2Banner.addEventListener('click', () => {
+        dom.z2CheckBanner.classList.remove('visible');
+      });
+
+      // 完了モーダル閉じる
+      dom.btnFinishClose.addEventListener('click', () => {
+        dom.finishModal.classList.remove('open');
+        resetSession();
+      });
+
+      // モーダル背景タップで閉じる（確認モーダル除く）
+      [dom.editModal, dom.settingsModal].forEach((backdrop) => {
+        backdrop.addEventListener('click', (e) => {
+          if (e.target === backdrop) {
+            backdrop.classList.remove('open');
+          }
+        });
+      });
+
+      /* =========================================================
+         初期化
+         ========================================================= */
+      wakeManager.updateBadge();
+      renderAll();
+    })();
+  </script>
+</body>
+</html>
